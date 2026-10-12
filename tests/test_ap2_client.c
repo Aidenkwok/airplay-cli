@@ -55,6 +55,8 @@ void ap2cl_test_set_apple_model(struct ap2cl_s *p, bool apple);
 bool ap2cl_test_apple_model_default(const char *txt, const char *am);
 bool ap2cl_test_env_enabled(const char *name, bool unset_default);
 bool ap2cl_test_mrp_type130_enabled(void);
+bool ap2cl_test_mrp_session_eligible(bool encrypted, bool pair_verified,
+                                     bool apple_model);
 void ap2cl_test_inject_clock_exchange(struct ap2cl_s *p, uint32_t count,
                                       uint64_t first_ms, uint64_t third_ms);
 void ap2cl_test_clear_clock_exchange(struct ap2cl_s *p);
@@ -1912,6 +1914,27 @@ static void test_apple_model_resolution(void)
     puts("ap2_client apple model resolution tests passed");
 }
 
+/* MediaRemote (now-playing + the reverse event channel that carries Siri and
+ * touch-surface commands) needs an encrypted session and an Apple receiver.
+ * A standalone HomePod with "Everyone on the same network" access pairs
+ * transiently, so a transient Apple session must qualify too. */
+static void test_mrp_session_eligibility(void)
+{
+    /* Pair-verified (stored credentials): eligible, as before. */
+    assert(ap2cl_test_mrp_session_eligible(true, true, true));
+    assert(ap2cl_test_mrp_session_eligible(true, true, false));
+    /* Transient HomePod / Apple TV: eligible. */
+    assert(ap2cl_test_mrp_session_eligible(true, false, true));
+    assert(ap2cl_test_apple_model_default(
+        "acl=0 model=AudioAccessory5,1 osvers=27.0", NULL));
+    /* Transient third-party speaker (Sonos, WiiM, ...): never. */
+    assert(!ap2cl_test_mrp_session_eligible(true, false, false));
+    /* No encrypted session (no HAP context): never. */
+    assert(!ap2cl_test_mrp_session_eligible(false, true, true));
+    assert(!ap2cl_test_mrp_session_eligible(false, false, true));
+    puts("ap2_client MediaRemote session eligibility tests passed");
+}
+
 /* The pacing window is a duration, so every term scales with the stream rate:
  * the margin held back from the receiver's reported buffer, the default that
  * stands in for a buffer it never reported, and the splice depth that caps
@@ -2520,6 +2543,7 @@ int main(void)
     test_feedback_miss_tolerated_then_recovered();
     test_dead_channel_writes_farewell_teardown();
     test_apple_model_resolution();
+    test_mrp_session_eligibility();
     test_pacing_window_rate_scaling();
     test_splice_depth_override_vs_reported_buffer();
     test_splice_depth_bounds();

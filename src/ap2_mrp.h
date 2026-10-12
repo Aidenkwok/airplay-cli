@@ -138,6 +138,15 @@ bool ap2_mrp_attach(struct ap2_mrp_ctx *m, int data_port, uint64_t seed);
 bool ap2_mrp_attach_events(struct ap2_mrp_ctx *m, int event_sock);
 
 /*
+ * Replace the channel HKDF input with the pairing's full secret (see
+ * ap2_hap_get_kdf_secret): transient sessions need the 64-byte SRP session
+ * key, not the 32-byte audio key passed to ap2_mrp_create(). Call before
+ * ap2_mrp_attach_events() / ap2_mrp_attach().
+ */
+void ap2_mrp_set_kdf_secret(struct ap2_mrp_ctx *m,
+                            const uint8_t *secret, size_t len);
+
+/*
  * Bootstrap a standalone remote-control-only session (sidecar model, for the
  * metadata-only display mode): own TCP connection, pair-verify, session SETUP
  * with isRemoteControlOnly=true, event channel, RECORD, type-130 data channel.

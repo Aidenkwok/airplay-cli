@@ -1642,6 +1642,9 @@ static void ap2_native_setup_mrp(struct ap2cl_s *p)
                                 p->session_uuid, p->group_uuid,
                                 ap2_hap_get_shared_secret(p->hap));
     if (!p->mrp) return;
+    size_t kdf_len = 0;
+    const uint8_t *kdf = ap2_hap_get_kdf_secret(p->hap, &kdf_len);
+    ap2_mrp_set_kdf_secret(p->mrp, kdf, kdf_len);
     ap2_mrp_set_remote_command_callback(
         p->mrp, ap2_remote_command_received, p);
     if (!ap2_mrp_attach_events(p->mrp, p->events_sock)) {
@@ -4927,13 +4930,26 @@ static ap2_mrp_playback_state_t ap2_mrp_current_playback_state(
                                      : AP2_MRP_PLAYBACK_STOPPED;
 }
 
-/* Lazily create MediaRemote for pair-verified native sessions and attach the
+/* MediaRemote is Apple-only and needs an encrypted (HAP) session. A
+ * pair-verified session is an Apple device in practice; a transient one
+ * qualifies by model, because a HomePod whose access is "Everyone on the same
+ * network" pairs transiently and its Siri / touch-surface commands arrive only
+ * on the reverse event channel MediaRemote services. Transient third-party
+ * speakers never receive these Apple-specific messages. */
+static bool ap2_mrp_session_eligible(bool encrypted, bool pair_verified,
+                                     bool apple_model)
+{
+    return encrypted && (pair_verified || apple_model);
+}
+
+/* Lazily create MediaRemote for eligible native sessions and attach the
  * encrypted reverse event channel before advertising any controllable state.
- * Transient-paired third-party speakers never receive these Apple-specific
- * messages. Set CLIAIRPLAY_MRP=0 to disable the path for diagnosis. */
+ * Set CLIAIRPLAY_MRP=0 to disable the path for diagnosis. */
 static void ap2_mrp_ready(struct ap2cl_s *p)
 {
-    if (p->mrp || p->flow != FLOW_NATIVE_AP2 || !p->auth_credentials ||
+    if (p->mrp || p->flow != FLOW_NATIVE_AP2 ||
+        !ap2_mrp_session_eligible(p->hap != NULL, p->auth_credentials != NULL,
+                                  p->apple_model) ||
         p->sock_fd < 0 || p->events_sock < 0 || !p->session_uuid[0])
         return;
     if (!ap2_env_enabled("CLIAIRPLAY_MRP", true)) return;
@@ -4942,6 +4958,9 @@ static void ap2_mrp_ready(struct ap2cl_s *p)
                             p->session_uuid, p->group_uuid,
                             ap2_hap_get_shared_secret(p->hap));
     if (!p->mrp) return;
+    size_t kdf_len = 0;
+    const uint8_t *kdf = ap2_hap_get_kdf_secret(p->hap, &kdf_len);
+    ap2_mrp_set_kdf_secret(p->mrp, kdf, kdf_len);
     ap2_mrp_set_remote_command_callback(
         p->mrp, ap2_remote_command_received, p);
     if (!ap2_mrp_attach_events(p->mrp, p->events_sock)) {
@@ -5764,6 +5783,12 @@ bool ap2cl_test_env_enabled(const char *name, bool unset_default)
 bool ap2cl_test_mrp_type130_enabled(void)
 {
     return ap2_mrp_type130_enabled();
+}
+
+bool ap2cl_test_mrp_session_eligible(bool encrypted, bool pair_verified,
+                                     bool apple_model)
+{
+    return ap2_mrp_session_eligible(encrypted, pair_verified, apple_model);
 }
 
 /* Plant a probe-streak snapshot where the shared-daemon poller would put
