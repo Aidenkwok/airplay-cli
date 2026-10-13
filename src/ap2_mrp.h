@@ -107,8 +107,8 @@ typedef struct {
  *                session key after transient pair-setup. NULL for the sidecar
  *                model.
  * :param secret_len: byte length of secret (1..64); ignored when secret is NULL.
- * :returns: the context, or NULL on allocation failure or an out-of-range
- *           secret_len.
+ * :returns: the context, or NULL on a missing host, allocation failure or an
+ *           out-of-range secret_len.
  */
 struct ap2_mrp_ctx *ap2_mrp_create(const char *host, int port,
                                     const char *auth_credentials,

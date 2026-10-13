@@ -25,10 +25,10 @@ Protocol and architecture detail lives in `DESIGN.md`; open work in `TODO.md`.
   (type 103, RTP over TCP + `SETRATEANCHORTIME`) auto-selected on receivers
   that advertise it.
 - **Apple MediaRemote metadata**: Apple targets (pair-verified, or
-  transient-paired HomePods) receive the full now-playing client,
-  playback-state, transport-command, text and artwork sequence used by current
-  Apple senders, and their Siri / touch-surface commands are reported as
-  `[EVENT] remote command=`.
+  transient-paired Apple receivers such as HomePods) receive the full
+  now-playing client, playback-state, transport-command, text and artwork
+  sequence used by current Apple senders, and their Siri / touch-surface
+  commands are reported as `[EVENT] remote command=`.
 - **PTP timing**: an in-process gPTP-dialect grandmaster engine, plus a
   shared-clock daemon mode (`--ptp-daemon`/`--ptp-shared`) for multi-room.
 - **Route auto-selection** (`--protocol auto`): the binary picks RAOP vs

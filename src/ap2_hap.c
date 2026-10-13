@@ -107,7 +107,7 @@ struct ap2_hap_ctx {
     /* HKDF input for the session's derived channels (events, DataStream):
      * the 32-byte X25519 secret after pair-verify, the full 64-byte SRP
      * session key after transient pair-setup (owntone pair_homekit). */
-    uint8_t kdf_secret[64];
+    uint8_t kdf_secret[SRP_HASH_LEN];
     size_t kdf_secret_len;
 
     /* Session keys derived after pair-verify */
