@@ -127,7 +127,7 @@ static struct ap2_mrp_ctx *create_mrp_with_callback(
     struct ap2_mrp_ctx *mrp = ap2_mrp_create(
         "127.0.0.1", 7000, NULL, "1A2B3D4EA1B2C3D4",
         "Music Assistant", "11111111-2222-4333-8444-555555555555",
-        "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", secret);
+        "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", secret, KEY_SIZE);
     assert(mrp);
     ap2_mrp_set_remote_command_callback(mrp, callback, userdata);
     assert(ap2_mrp_attach_events(mrp, event_sock));
@@ -289,7 +289,7 @@ static void test_artwork_snapshot_generation(const uint8_t secret[KEY_SIZE])
     struct ap2_mrp_ctx *mrp = ap2_mrp_create(
         "127.0.0.1", 7000, NULL, "1A2B3D4EA1B2C3D4",
         "Music Assistant", "11111111-2222-4333-8444-555555555555",
-        "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", secret);
+        "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", secret, KEY_SIZE);
     assert(mrp);
 
     assert(ap2_mrp_set_artwork(
@@ -331,10 +331,10 @@ static void test_artwork_snapshot_generation(const uint8_t secret[KEY_SIZE])
 }
 
 /* Transient pair-setup: the event keys derive from the full 64-byte SRP
- * session key (as owntone's pair_homekit does), while ap2_mrp_create() is
- * handed only its first 32 bytes (the audio key). Measured on a HomePod
- * (AudioAccessory5,1, HomePod OS 27.0): keyed from the 32-byte prefix, the
- * first Siri command fails to decrypt and the session is torn down. */
+ * session key (as owntone's pair_homekit does), of which the audio key is
+ * only the 32-byte prefix. Measured on a HomePod (AudioAccessory5,1, HomePod
+ * OS 27.0): keyed from that prefix, the first Siri command fails to decrypt
+ * and the session is torn down. */
 static void test_transient_kdf_secret(void)
 {
     enum { SRP_KEY_SIZE = 64 };
@@ -349,7 +349,8 @@ static void test_transient_kdf_secret(void)
     int sockets[2];
     struct timeval timeout = {.tv_sec = 2};
 
-    /* Full session key installed: Siri "next" and a top-surface tap decode. */
+    /* Keyed from the full session key: Siri "next" and a top-surface tap
+     * decode. */
     assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0);
     assert(setsockopt(sockets[1], SOL_SOCKET, SO_RCVTIMEO,
                       &timeout, sizeof(timeout)) == 0);
@@ -357,9 +358,8 @@ static void test_transient_kdf_secret(void)
     struct ap2_mrp_ctx *mrp = ap2_mrp_create(
         "127.0.0.1", 7000, NULL, "1A2B3D4EA1B2C3D4",
         "Music Assistant", "11111111-2222-4333-8444-555555555555",
-        "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", session_key);
+        "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", session_key, SRP_KEY_SIZE);
     assert(mrp);
-    ap2_mrp_set_kdf_secret(mrp, session_key, SRP_KEY_SIZE);
     ap2_mrp_set_remote_command_callback(mrp, capture_remote_command, &capture);
     assert(ap2_mrp_attach_events(mrp, sockets[0]));
     send_request(sockets[1], receiver_key, 0, 1, "nitm");
@@ -374,8 +374,8 @@ static void test_transient_kdf_secret(void)
     ap2_mrp_destroy(mrp);
     close(sockets[1]);
 
-    /* Keyed from the 32-byte prefix only (the pre-fix behaviour): the frame
-     * does not authenticate, nothing is dispatched and the channel closes. */
+    /* Keyed from the 32-byte audio-key prefix only: the frame does not
+     * authenticate, nothing is dispatched and the channel closes. */
     assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0);
     memset(&capture, 0, sizeof(capture));
     mrp = create_mrp_with_callback(session_key, sockets[0],
@@ -387,33 +387,16 @@ static void test_transient_kdf_secret(void)
     ap2_mrp_destroy(mrp);
     close(sockets[1]);
 
-    /* An out-of-range secret is ignored; the create-time key stays in use. */
-    uint8_t secret[KEY_SIZE];
-    for (int i = 0; i < KEY_SIZE; i++) secret[i] = (uint8_t)i;
-    derive_key(secret, "Events-Write-Encryption-Key", receiver_key);
-    derive_key(secret, "Events-Read-Encryption-Key", sender_key);
+    /* An out-of-range secret length is refused at creation. */
     uint8_t oversized[SRP_KEY_SIZE + 1] = {0};
-    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0);
-    assert(setsockopt(sockets[1], SOL_SOCKET, SO_RCVTIMEO,
-                      &timeout, sizeof(timeout)) == 0);
-    memset(&capture, 0, sizeof(capture));
-    mrp = ap2_mrp_create(
+    assert(!ap2_mrp_create(
         "127.0.0.1", 7000, NULL, "1A2B3D4EA1B2C3D4",
         "Music Assistant", "11111111-2222-4333-8444-555555555555",
-        "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", secret);
-    assert(mrp);
-    ap2_mrp_set_kdf_secret(mrp, oversized, sizeof(oversized));
-    ap2_mrp_set_kdf_secret(mrp, NULL, SRP_KEY_SIZE);
-    ap2_mrp_set_kdf_secret(mrp, session_key, 0);
-    ap2_mrp_set_remote_command_callback(mrp, capture_remote_command, &capture);
-    assert(ap2_mrp_attach_events(mrp, sockets[0]));
-    send_request(sockets[1], receiver_key, 0, 1, "pitm");
-    ap2_mrp_tick(mrp);
-    read_response(sockets[1], sender_key, 0, 1);
-    assert(capture.count == 1);
-    assert(capture.commands[0] == AP2_REMOTE_COMMAND_PREVIOUS);
-    ap2_mrp_destroy(mrp);
-    close(sockets[1]);
+        "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", oversized, sizeof(oversized)));
+    assert(!ap2_mrp_create(
+        "127.0.0.1", 7000, NULL, "1A2B3D4EA1B2C3D4",
+        "Music Assistant", "11111111-2222-4333-8444-555555555555",
+        "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", session_key, 0));
 }
 
 int main(void)

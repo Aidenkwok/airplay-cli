@@ -55,7 +55,7 @@ void ap2cl_test_set_apple_model(struct ap2cl_s *p, bool apple);
 bool ap2cl_test_apple_model_default(const char *txt, const char *am);
 bool ap2cl_test_env_enabled(const char *name, bool unset_default);
 bool ap2cl_test_mrp_type130_enabled(void);
-bool ap2cl_test_mrp_session_eligible(bool encrypted, bool pair_verified,
+bool ap2cl_test_mrp_session_eligible(bool encrypted, bool stored_credentials,
                                      bool apple_model);
 void ap2cl_test_inject_clock_exchange(struct ap2cl_s *p, uint32_t count,
                                       uint64_t first_ms, uint64_t third_ms);
@@ -1439,7 +1439,7 @@ static void test_mrp_bundle_and_pause_publish(void)
     struct ap2_mrp_ctx *mrp = ap2_mrp_create(
         "127.0.0.1", 7000, NULL, "0011223344556677", "bundle sender",
         "11111111-1111-1111-1111-111111111111",
-        "22222222-2222-2222-2222-222222222222", NULL);
+        "22222222-2222-2222-2222-222222222222", NULL, 0);
     assert(mrp);
     ap2cl_test_set_mrp(client, mrp);
 
@@ -1647,7 +1647,7 @@ static void test_mrp_identical_metadata_skip(void)
     struct ap2_mrp_ctx *mrp = ap2_mrp_create(
         "127.0.0.1", 7000, NULL, "0011223344556677", "skip sender",
         "11111111-1111-1111-1111-111111111111",
-        "22222222-2222-2222-2222-222222222222", NULL);
+        "22222222-2222-2222-2222-222222222222", NULL, 0);
     assert(mrp);
     ap2cl_test_set_mrp(client, mrp);
 
@@ -1920,10 +1920,11 @@ static void test_apple_model_resolution(void)
  * transiently, so a transient Apple session must qualify too. */
 static void test_mrp_session_eligibility(void)
 {
-    /* Pair-verified (stored credentials): eligible, as before. */
+    /* Stored credentials (pair-verified Apple TV / HomePod): eligible, as
+     * before. */
     assert(ap2cl_test_mrp_session_eligible(true, true, true));
     assert(ap2cl_test_mrp_session_eligible(true, true, false));
-    /* Transient HomePod / Apple TV: eligible. */
+    /* Transient Apple model (a HomePod open to everyone): eligible. */
     assert(ap2cl_test_mrp_session_eligible(true, false, true));
     assert(ap2cl_test_apple_model_default(
         "acl=0 model=AudioAccessory5,1 osvers=27.0", NULL));

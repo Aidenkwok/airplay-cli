@@ -25,7 +25,7 @@ Protocol and architecture detail lives in `DESIGN.md`; open work in `TODO.md`.
   (type 103, RTP over TCP + `SETRATEANCHORTIME`) auto-selected on receivers
   that advertise it.
 - **Apple MediaRemote metadata**: Apple targets (pair-verified, or
-  transient-paired HomePods / Apple TVs) receive the full now-playing client,
+  transient-paired HomePods) receive the full now-playing client,
   playback-state, transport-command, text and artwork sequence used by current
   Apple senders, and their Siri / touch-surface commands are reported as
   `[EVENT] remote command=`.
